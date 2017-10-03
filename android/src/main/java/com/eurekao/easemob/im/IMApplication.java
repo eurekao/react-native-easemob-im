@@ -17,6 +17,10 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.eurekao.easemob.im.common.crash.AppCrashHandler;
+import com.eurekao.easemob.im.db.DBManager;
+import com.eurekao.easemob.im.db.UserDao;
+import com.eurekao.easemob.im.domain.EaseUser;
+import com.eurekao.easemob.im.parse.UserProfileManager;
 import com.hyphenate.EMCallBack;
 import com.hyphenate.EMConnectionListener;
 import com.hyphenate.EMError;
@@ -32,7 +36,10 @@ import com.hyphenate.exceptions.HyphenateException;
 import com.hyphenate.util.EMLog;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -49,6 +56,7 @@ public class IMApplication {
     private static Class mainActivityClass;
     private static IMApplication instance = null;
     private static LocalBroadcastManager broadcastManager;
+    public static String currentUserNick = "";
 
     Queue<String> msgQueue = new ConcurrentLinkedQueue<>();
     android.os.Handler handler;
@@ -65,7 +73,19 @@ public class IMApplication {
     private boolean isBlackListSyncedWithServer = false;
     private boolean isGroupAndContactListenerRegisted;
     protected EMMessageListener messageListener = null;
+    private String username;
+    private Map<String, EaseUser> contactList;
+    private UserProfileManager userProManager;
+    private EaseNotifier notifier = null;
 
+
+    public EaseNotifier getNotifier(){
+        if (notifier == null) {
+            notifier = new EaseNotifier();
+            notifier.init(context);
+        }
+        return notifier;
+    }
     public synchronized static IMApplication getInstance() {
         if (instance == null) {
             instance = new IMApplication();
@@ -73,24 +93,27 @@ public class IMApplication {
         return instance;
     }
 
+    public static ImModel getImModel(){
+        return imModel;
+    }
+
     public static void init(Context context, Class mainActivityClass, Looper looper) {
         IMApplication.context = context.getApplicationContext();
         IMApplication.mainActivityClass = mainActivityClass;
         getInstance().initHandler(looper);
-        PreferenceManager.init(context);
+        AppCrashHandler.getInstance(context);
         imModel = new ImModel(context);
         EMOptions options = initChatOptions();
+        EMClient.getInstance().init(context, options);
         EMClient.getInstance().setDebugMode(true);
-
-        AppCrashHandler.getInstance(context);
+        PreferenceManager.init(context);
+        getInstance().getUserProfileManager().init(context);
         broadcastManager = LocalBroadcastManager.getInstance(context);
-
         getInstance().setGlobalListeners();
     }
 
 
-
-    private static EMOptions initChatOptions(){
+    private static EMOptions initChatOptions() {
         Log.d(TAG, "init HuanXin Options");
 
         EMOptions options = new EMOptions();
@@ -107,10 +130,10 @@ public class IMApplication {
         //options.setMipushConfig("2882303761517426801", "5381742660801");
 
         //set custom servers, commonly used in private deployment
-        if(imModel.isCustomServerEnable() && imModel.getRestServer() != null && imModel.getIMServer() != null) {
+        if (imModel.isCustomServerEnable() && imModel.getRestServer() != null && imModel.getIMServer() != null) {
             options.setRestServer(imModel.getRestServer());
             options.setIMServer(imModel.getIMServer());
-            if(imModel.getIMServer().contains(":")) {
+            if (imModel.getIMServer().contains(":")) {
                 options.setIMServer(imModel.getIMServer().split(":")[0]);
                 options.setImPort(Integer.valueOf(imModel.getIMServer().split(":")[1]));
             }
@@ -142,7 +165,7 @@ public class IMApplication {
         handler = new android.os.Handler(looper) {
             @Override
             public void handleMessage(Message msg) {
-                String str = (String)msg.obj;
+                String str = (String) msg.obj;
                 Toast.makeText(context, str, Toast.LENGTH_LONG).show();
             }
         };
@@ -151,7 +174,7 @@ public class IMApplication {
         }
     }
 
-    protected void setGlobalListeners(){
+    protected void setGlobalListeners() {
         syncGroupsListeners = new ArrayList<>();
         syncContactsListeners = new ArrayList<>();
         syncBlackListListeners = new ArrayList<>();
@@ -188,6 +211,11 @@ public class IMApplication {
                         asyncFetchGroupsFromServer(null);
                     }
 
+                    if (!isContactsSyncedWithServer) {
+                        asyncFetchContactsFromServer(null);
+                    }
+
+
                     if (!isBlackListSyncedWithServer) {
                         asyncFetchBlackListFromServer(null);
                     }
@@ -200,7 +228,6 @@ public class IMApplication {
         registerGroupAndContactListener();
         //register message event listener
         registerMessageListener();
-
     }
 
     protected void registerMessageListener() {
@@ -212,9 +239,7 @@ public class IMApplication {
                 for (EMMessage message : messages) {
                     EMLog.d(TAG, "onMessageReceived id : " + message.getMsgId());
                     // in background, do not refresh UI, notify it in notification bar
-                    if(!easeUI.hasForegroundActivies()){
-                        getNotifier().onNewMsg(message);
-                    }
+                    getNotifier().onNewMsg(message);
                 }
             }
 
@@ -234,7 +259,7 @@ public class IMApplication {
                     //获取扩展属性 此处省略
                     //maybe you need get extension of your message
                     //message.getStringAttribute("");
-                    EMLog.d(TAG, String.format("Command：action:%s,message:%s", action,message.toString()));
+                    EMLog.d(TAG, String.format("Command：action:%s,message:%s", action, message.toString()));
                 }
             }
 
@@ -273,8 +298,8 @@ public class IMApplication {
         EMClient.getInstance().chatManager().addMessageListener(messageListener);
     }
 
-    public void registerGroupAndContactListener(){
-        if(!isGroupAndContactListenerRegisted){
+    public void registerGroupAndContactListener() {
+        if (!isGroupAndContactListenerRegisted) {
             // EMClient.getInstance().groupManager().addGroupChangeListener(new MyGroupChangeListener());
             // EMClient.getInstance().contactManager().setContactListener(new MyContactListener());
             // EMClient.getInstance().addMultiDeviceListener(new MyMultiDeviceListener());
@@ -283,21 +308,21 @@ public class IMApplication {
 
     }
 
-    public synchronized void asyncFetchGroupsFromServer(final EMCallBack callback){
-        if(isSyncingGroupsWithServer){
+    public synchronized void asyncFetchGroupsFromServer(final EMCallBack callback) {
+        if (isSyncingGroupsWithServer) {
             return;
         }
 
         isSyncingGroupsWithServer = true;
 
-        new Thread(){
+        new Thread() {
             @Override
-            public void run(){
+            public void run() {
                 try {
                     List<EMGroup> groups = EMClient.getInstance().groupManager().getJoinedGroupsFromServer();
 
                     // in case that logout already before server returns, we should return immediately
-                    if(!isLoggedIn()){
+                    if (!isLoggedIn()) {
                         isGroupsSyncedWithServer = false;
                         isSyncingGroupsWithServer = false;
                         noitifyGroupSyncListeners(false);
@@ -309,7 +334,7 @@ public class IMApplication {
                     isSyncingGroupsWithServer = false;
                     noitifyGroupSyncListeners(true);
 
-                    if(callback != null){
+                    if (callback != null) {
                         callback.onSuccess();
                     }
                 } catch (HyphenateException e) {
@@ -317,7 +342,7 @@ public class IMApplication {
                     isGroupsSyncedWithServer = false;
                     isSyncingGroupsWithServer = false;
                     noitifyGroupSyncListeners(false);
-                    if(callback != null){
+                    if (callback != null) {
                         callback.onError(e.getErrorCode(), e.toString());
                     }
                 }
@@ -326,28 +351,110 @@ public class IMApplication {
         }.start();
     }
 
-    public void noitifyGroupSyncListeners(boolean success){
+    public void noitifyGroupSyncListeners(boolean success) {
         for (DataSyncListener listener : syncGroupsListeners) {
             listener.onSyncComplete(success);
         }
     }
 
-    public void asyncFetchBlackListFromServer(final EMValueCallBack<List<String>> callback){
+    public void asyncFetchContactsFromServer(final EMValueCallBack<List<String>> callback) {
+        if (isSyncingContactsWithServer) {
+            return;
+        }
+        isSyncingContactsWithServer = true;
+        new Thread() {
+            @Override
+            public void run() {
+                List<String> usernames = null;
+                List<String> selfIds = null;
+                try {
+                    usernames = EMClient.getInstance().contactManager().getAllContactsFromServer();
+                    selfIds = EMClient.getInstance().contactManager().getSelfIdsOnOtherPlatform();
+                    // in case that logout already before server returns, we should return immediately
+                    if (!isLoggedIn()) {
+                        isContactsSyncedWithServer = false;
+                        isSyncingContactsWithServer = false;
+                        notifyContactsSyncListener(false);
+                        return;
+                    }
+                    if (selfIds.size() > 0) {
+                        usernames.addAll(selfIds);
+                    }
+                    Map<String, EaseUser> userlist = new HashMap<String, EaseUser>();
+                    for (String username : usernames) {
+                        EaseUser user = new EaseUser(username);
+                        EaseCommonUtils.setUserInitialLetter(user);
+                        userlist.put(username, user);
+                    }
+                    // save the contact list to cache
+                    getContactList().clear();
+                    getContactList().putAll(userlist);
+                    // save the contact list to database
+                    UserDao dao = new UserDao(IMApplication.getContext());
+                    List<EaseUser> users = new ArrayList<EaseUser>(userlist.values());
+                    dao.saveContactList(users);
 
-        if(isSyncingBlackListWithServer){
+                    imModel.setContactSynced(true);
+                    EMLog.d(TAG, "set contact syn status to true");
+
+                    isContactsSyncedWithServer = true;
+                    isSyncingContactsWithServer = false;
+
+                    //notify sync success
+                    notifyContactsSyncListener(true);
+
+                    getUserProfileManager().asyncFetchContactInfosFromServer(usernames, new EMValueCallBack<List<EaseUser>>() {
+
+                        @Override
+                        public void onSuccess(List<EaseUser> uList) {
+                            updateContactList(uList);
+                            getUserProfileManager().notifyContactInfosSyncListener(true);
+                        }
+
+                        @Override
+                        public void onError(int error, String errorMsg) {
+                        }
+                    });
+                    if (callback != null) {
+                        callback.onSuccess(usernames);
+                    }
+                } catch (HyphenateException e) {
+                    imModel.setContactSynced(false);
+                    isContactsSyncedWithServer = false;
+                    isSyncingContactsWithServer = false;
+                    notifyContactsSyncListener(false);
+                    e.printStackTrace();
+                    if (callback != null) {
+                        callback.onError(e.getErrorCode(), e.toString());
+                    }
+                }
+
+            }
+        }.start();
+    }
+
+    public void notifyContactsSyncListener(boolean success){
+        for (DataSyncListener listener : syncContactsListeners) {
+            listener.onSyncComplete(success);
+        }
+    }
+
+    public void asyncFetchBlackListFromServer(final EMValueCallBack<List<String>> callback) {
+
+        if (isSyncingBlackListWithServer) {
             return;
         }
 
         isSyncingBlackListWithServer = true;
 
-        new Thread(){
+        new Thread() {
             @Override
-            public void run(){
+            public void run() {
                 try {
                     List<String> usernames = EMClient.getInstance().contactManager().getBlackListFromServer();
 
                     // in case that logout already before server returns, we should return immediately
-                    if(!isLoggedIn()){
+                    if (!isLoggedIn()) {
                         isBlackListSyncedWithServer = false;
                         isSyncingBlackListWithServer = false;
                         notifyBlackListSyncListener(false);
@@ -360,7 +467,7 @@ public class IMApplication {
                     isSyncingBlackListWithServer = false;
 
                     notifyBlackListSyncListener(true);
-                    if(callback != null){
+                    if (callback != null) {
                         callback.onSuccess(usernames);
                     }
                 } catch (HyphenateException e) {
@@ -370,7 +477,7 @@ public class IMApplication {
                     isSyncingBlackListWithServer = true;
                     e.printStackTrace();
 
-                    if(callback != null){
+                    if (callback != null) {
                         callback.onError(e.getErrorCode(), e.toString());
                     }
                 }
@@ -379,19 +486,165 @@ public class IMApplication {
         }.start();
     }
 
-    public void notifyBlackListSyncListener(boolean success){
+    public void notifyBlackListSyncListener(boolean success) {
         for (DataSyncListener listener : syncBlackListListeners) {
             listener.onSyncComplete(success);
         }
     }
 
-    protected void onUserException(String exception){
+    protected void onUserException(String exception) {
         EMLog.e(TAG, "onUserException: " + exception);
         showToast(exception);
     }
 
     public boolean isLoggedIn() {
         return EMClient.getInstance().isLoggedInBefore();
+    }
+
+    public void logout(boolean unbindDeviceToken, final EMCallBack callback) {
+        Log.d(TAG, "logout: " + unbindDeviceToken);
+        EMClient.getInstance().logout(unbindDeviceToken, new EMCallBack() {
+
+            @Override
+            public void onSuccess() {
+                Log.d(TAG, "logout: onSuccess");
+                reset();
+                if (callback != null) {
+                    callback.onSuccess();
+                }
+
+            }
+
+            @Override
+            public void onProgress(int progress, String status) {
+                if (callback != null) {
+                    callback.onProgress(progress, status);
+                }
+            }
+
+            @Override
+            public void onError(int code, String error) {
+                Log.d(TAG, "logout: onSuccess");
+                reset();
+                if (callback != null) {
+                    callback.onError(code, error);
+                }
+            }
+        });
+    }
+
+    public void setCurrentUserName(String username) {
+        this.username = username;
+        imModel.setCurrentUserName(username);
+    }
+
+    public String getCurrentUsernName() {
+        if (username == null) {
+            username = imModel.getCurrentUsernName();
+        }
+        return username;
+    }
+
+    public void setContactList(Map<String, EaseUser> aContactList) {
+        if(aContactList == null){
+            if (contactList != null) {
+                contactList.clear();
+            }
+            return;
+        }
+        contactList = aContactList;
+    }
+
+    public void saveContact(EaseUser user){
+        contactList.put(user.getUsername(), user);
+        imModel.saveContact(user);
+    }
+
+    public Map<String, EaseUser> getContactList() {
+        if (isLoggedIn() && contactList == null) {
+            contactList = imModel.getContactList();
+        }
+
+        // return a empty non-null object to avoid app crash
+        if(contactList == null){
+            return new Hashtable<String, EaseUser>();
+        }
+
+        return contactList;
+    }
+
+    public boolean isSpeakerOpened() {
+        return imModel.getSettingMsgSpeaker();
+    }
+
+    public boolean isMsgVibrateAllowed(EMMessage message) {
+        return imModel.getSettingMsgVibrate();
+    }
+
+    public boolean isMsgSoundAllowed(EMMessage message) {
+        return imModel.getSettingMsgSound();
+    }
+
+    public boolean isMsgNotifyAllowed(EMMessage message) {
+        if(message == null){
+            return imModel.getSettingMsgNotification();
+        }
+        if(!imModel.getSettingMsgNotification()){
+            return false;
+        }else{
+            String chatUsename = null;
+            List<String> notNotifyIds = null;
+            // get user or group id which was blocked to show message notifications
+            if (message.getChatType() == EMMessage.ChatType.Chat) {
+                chatUsename = message.getFrom();
+                notNotifyIds = imModel.getDisabledIds();
+            } else {
+                chatUsename = message.getTo();
+                notNotifyIds = imModel.getDisabledGroups();
+            }
+
+            if (notNotifyIds == null || !notNotifyIds.contains(chatUsename)) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    synchronized void reset() {
+        isSyncingGroupsWithServer = false;
+        isSyncingContactsWithServer = false;
+        isSyncingBlackListWithServer = false;
+
+        imModel.setGroupsSynced(false);
+        imModel.setContactSynced(false);
+        imModel.setBlacklistSynced(false);
+
+        isGroupsSyncedWithServer = false;
+        isContactsSyncedWithServer = false;
+        isBlackListSyncedWithServer = false;
+
+        isGroupAndContactListenerRegisted = false;
+
+        setContactList(null);
+        getUserProfileManager().reset();
+        DBManager.getInstance().closeDB();
+    }
+
+    public void updateContactList(List<EaseUser> contactInfoList) {
+        for (EaseUser u : contactInfoList) {
+            contactList.put(u.getUsername(), u);
+        }
+        ArrayList<EaseUser> mList = new ArrayList<EaseUser>();
+        mList.addAll(contactList.values());
+        imModel.saveContactList(mList);
+    }
+
+    public UserProfileManager getUserProfileManager() {
+        if (userProManager == null) {
+            userProManager = new UserProfileManager();
+        }
+        return userProManager;
     }
 
     public static Context getContext() {
@@ -408,7 +661,7 @@ public class IMApplication {
         public static final String EASEUI_SHARED_NAME = "ease_shared";
 
         /**
-         *  设置自己扩展的消息类型的 key
+         * 设置自己扩展的消息类型的 key
          */
         // 通用的 msg_id key
         public static final String EASE_ATTR_MSG_ID = "em_msg_id";
@@ -443,7 +696,6 @@ public class IMApplication {
         public static final String MESSAGE_ATTR_ROBOT_MSGTYPE = "msgtype";
         public static final String ACTION_GROUP_CHANAGED = "action_group_changed";
         public static final String ACTION_CONTACT_CHANAGED = "action_contact_changed";
-        public static final String MESSAGE_TYPE_RECALL ="recall";
-    }
+        public static final String MESSAGE_TYPE_RECALL = "recall";
     }
 }

@@ -1,13 +1,23 @@
 package com.eurekao.easemob.im;
 
 import android.content.Context;
+
+import com.eurekao.easemob.im.db.UserDao;
+import com.eurekao.easemob.im.domain.EaseUser;
+import com.facebook.react.bridge.WritableMap;
+import com.hyphenate.chat.EMConversation;
+import com.hyphenate.chat.EMMessage;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ImModel {
+    public final static String observeRecentContact = "observeRecentContact";//'最近会话'
+    public final static String observeReceiveMessage = "observeReceiveMessage";//'接收消息'
 
+    UserDao dao = null;
     protected Context context = null;
     protected Map<Key,Object> valueCache = new HashMap<Key,Object>();
 
@@ -15,10 +25,23 @@ public class ImModel {
         context = ctx;
         PreferenceManager.init(context);
     }
-    /**
-     * save current username
-     * @param username
-     */
+
+    public boolean saveContactList(List<EaseUser> contactList) {
+        UserDao dao = new UserDao(context);
+        dao.saveContactList(contactList);
+        return true;
+    }
+
+    public Map<String, EaseUser> getContactList() {
+        UserDao dao = new UserDao(context);
+        return dao.getContactList();
+    }
+
+    public void saveContact(EaseUser user){
+        UserDao dao = new UserDao(context);
+        dao.saveContact(user);
+    }
+
     public void setCurrentUserName(String username){
         PreferenceManager.getInstance().setCurrentUserName(username);
     }
@@ -91,6 +114,59 @@ public class ImModel {
         return (Boolean) (val != null?val:true);
     }
 
+
+
+    public void setDisabledGroups(List<String> groups){
+        if(dao == null){
+            dao = new UserDao(context);
+        }
+
+        List<String> list = new ArrayList<String>();
+        list.addAll(groups);
+        dao.setDisabledGroups(list);
+        valueCache.put(Key.DisabledGroups, list);
+    }
+
+    public List<String> getDisabledGroups(){
+        Object val = valueCache.get(Key.DisabledGroups);
+
+        if(dao == null){
+            dao = new UserDao(context);
+        }
+
+        if(val == null){
+            val = dao.getDisabledGroups();
+            valueCache.put(Key.DisabledGroups, val);
+        }
+
+        //noinspection unchecked
+        return (List<String>) val;
+    }
+
+    public void setDisabledIds(List<String> ids){
+        if(dao == null){
+            dao = new UserDao(context);
+        }
+
+        dao.setDisabledIds(ids);
+        valueCache.put(Key.DisabledIds, ids);
+    }
+
+    public List<String> getDisabledIds(){
+        Object val = valueCache.get(Key.DisabledIds);
+
+        if(dao == null){
+            dao = new UserDao(context);
+        }
+
+        if(val == null){
+            val = dao.getDisabledIds();
+            valueCache.put(Key.DisabledIds, val);
+        }
+
+        //noinspection unchecked
+        return (List<String>) val;
+    }
 
     public void setGroupsSynced(boolean synced){
         PreferenceManager.getInstance().setGroupsSynced(synced);
@@ -203,6 +279,19 @@ public class ImModel {
 
     public String getCutomAppkey() {
         return PreferenceManager.getInstance().getCustomAppkey();
+    }
+
+    public static Object createRecentList(List<EMConversation> recents, int unreadNum) {
+        return null;
+    }
+
+    public static Object createMessageList(List<EMMessage> messageList) {
+
+        return null;
+    }
+
+    public static WritableMap createMessage(EMMessage item) {
+        return null;
     }
 
     enum Key{
