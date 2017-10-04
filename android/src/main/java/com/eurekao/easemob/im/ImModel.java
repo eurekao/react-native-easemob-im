@@ -408,12 +408,12 @@ public class ImModel {
         itemMap.putString(MessageConstant.Message.MSG_ID, message.getMsgId());
         itemMap.putString(MessageConstant.Message.MSG_TYPE, getMessageType(message.getType()));
         itemMap.putString(MessageConstant.Message.TIME_STRING, Long.toString(message.getMsgTime() / 1000));
-        itemMap.putString(MessageConstant.Message.IS_OUTGOING, message.direct()==EMMessage.Direct.SEND?"true":"false");
+        itemMap.putString(MessageConstant.Message.IS_OUTGOING, message.direct() == EMMessage.Direct.SEND ? "0" : "1");
         itemMap.putString(MessageConstant.Message.STATUS, getMessageStatus(message.status()));
 
         WritableMap user = Arguments.createMap();
         //user.putString(MessageConstant.User.DISPLAY_NAME, displayName);
-        user.putString(MessageConstant.User.USER_ID,  message.getFrom());
+        user.putString(MessageConstant.User.USER_ID, message.getFrom());
         //user.putString(MessageConstant.User.AVATAR_PATH, avatar);
         itemMap.putMap(MessageConstant.Message.FROM_USER, user);
 
@@ -480,7 +480,7 @@ public class ImModel {
             default:
                 break;
         }
-        if (message.direct() == EMMessage.Direct.RECEIVE&&!message.isAcked() && message.getChatType() == EMMessage.ChatType.Chat) {
+        if (message.direct() == EMMessage.Direct.RECEIVE && !message.isAcked() && message.getChatType() == EMMessage.ChatType.Chat) {
             try {
                 EMClient.getInstance().chatManager().ackMessageRead(message.getFrom(), message.getMsgId());
             } catch (HyphenateException e) {

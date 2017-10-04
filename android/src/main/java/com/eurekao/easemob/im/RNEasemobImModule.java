@@ -237,6 +237,9 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
         }
         //send message
         EMClient.getInstance().chatManager().sendMessage(message);
+        List<EMMessage> toShow = new ArrayList<EMMessage>();
+        toShow.add(message);
+        ImModel.emit(ImModel.observeReceiveMessage, ImModel.createMessageList(toShow));
     }
 
     @ReactMethod
