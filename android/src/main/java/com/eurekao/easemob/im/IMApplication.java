@@ -241,6 +241,7 @@ public class IMApplication {
                     // in background, do not refresh UI, notify it in notification bar
                     getNotifier().onNewMsg(message);
                 }
+                ImModel.emit(ImModel.observeReceiveMessage, ImModel.createRecentList(imModel.loadConversationList(), 0));
             }
 
             @Override

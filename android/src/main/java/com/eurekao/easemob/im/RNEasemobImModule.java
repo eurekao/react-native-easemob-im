@@ -74,6 +74,7 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
         this.reactContext = reactContext;
         reactContext.addActivityEventListener(this);
         reactContext.addLifecycleEventListener(this);
+        ImModel.setReactContext(reactContext);
         registerMessageListener();
     }
 
@@ -276,48 +277,12 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
 
     @ReactMethod
     public void getRecentConversationList(final Promise promise) {
-        // get all conversations
-        Map<String, EMConversation> conversations = EMClient.getInstance().chatManager().getAllConversations();
-        List<Pair<Long, EMConversation>> sortList = new ArrayList<Pair<Long, EMConversation>>();
-        synchronized (conversations) {
-            for (EMConversation conversation : conversations.values()) {
-                if (conversation.getAllMessages().size() != 0) {
-                    sortList.add(new Pair<Long, EMConversation>(conversation.getLastMessage().getMsgTime(), conversation));
-                }
-            }
-        }
-        try {
-            sortConversationByLastChatTime(sortList);
-        } catch (Exception e) {
-            e.printStackTrace();
-            promise.reject("-1", e.getMessage());
-        }
-        List<EMConversation> list = new ArrayList<EMConversation>();
-        for (Pair<Long, EMConversation> sortItem : sortList) {
-            list.add(sortItem.second);
-        }
+        List<EMConversation> list =  IMApplication.getImModel().loadConversationList();
         if (list.size() > 0)
             promise.resolve(ImModel.createRecentList(list, 0));
         else {
             promise.reject("-1", "");
         }
-    }
-
-    private void sortConversationByLastChatTime(List<Pair<Long, EMConversation>> conversationList) {
-        Collections.sort(conversationList, new Comparator<Pair<Long, EMConversation>>() {
-            @Override
-            public int compare(final Pair<Long, EMConversation> con1, final Pair<Long, EMConversation> con2) {
-
-                if (con1.first.equals(con2.first)) {
-                    return 0;
-                } else if (con2.first.longValue() > con1.first.longValue()) {
-                    return 1;
-                } else {
-                    return -1;
-                }
-            }
-
-        });
     }
 
     @ReactMethod
@@ -364,25 +329,15 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
             }
 
             @Override
-            public void onCmdMessageReceived(List<EMMessage> messages) {
-
-            }
-
+            public void onCmdMessageReceived(List<EMMessage> messages) {}
             @Override
-            public void onMessageRead(List<EMMessage> messages) {
-            }
-
+            public void onMessageRead(List<EMMessage> messages) {}
             @Override
-            public void onMessageDelivered(List<EMMessage> messages) {
-            }
-
+            public void onMessageDelivered(List<EMMessage> messages) { }
             @Override
-            public void onMessageRecalled(List<EMMessage> messages) {
-            }
-
+            public void onMessageRecalled(List<EMMessage> messages) {}
             @Override
-            public void onMessageChanged(EMMessage emMessage, Object change) {
-            }
+            public void onMessageChanged(EMMessage emMessage, Object change) { }
         };
     }
 
@@ -450,14 +405,6 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
                 Toast.makeText(reactContext.getCurrentActivity(), reactContext.getString(tipId), Toast.LENGTH_SHORT).show();
             }
         });
-    }
-
-    public void emit(String eventName, Object date) {
-        try {
-            reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, date);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
     @Override
