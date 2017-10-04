@@ -1,18 +1,10 @@
 package com.eurekao.easemob.im;
 
-import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.IntentFilter;
-import android.content.pm.ApplicationInfo;
-import android.graphics.Color;
-import android.location.LocationProvider;
-import android.os.Environment;
 import android.os.Looper;
 import android.os.Message;
-import android.support.annotation.DrawableRes;
 import android.support.v4.content.LocalBroadcastManager;
-import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -241,7 +233,7 @@ public class IMApplication {
                     // in background, do not refresh UI, notify it in notification bar
                     getNotifier().onNewMsg(message);
                 }
-                ImModel.emit(ImModel.observeReceiveMessage, ImModel.createRecentList(imModel.loadConversationList(), 0));
+                ImModel.emit(ImModel.observeRecentContact, ImModel.createRecentList(imModel.loadConversationList(), 0));
             }
 
             @Override

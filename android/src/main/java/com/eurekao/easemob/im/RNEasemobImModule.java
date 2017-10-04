@@ -4,14 +4,9 @@ package com.eurekao.easemob.im;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.media.AudioManager;
-import android.net.Uri;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
-import android.view.WindowManager;
 import android.widget.Toast;
 
 import com.eurekao.easemob.im.common.ResourceUtil;
@@ -24,17 +19,11 @@ import com.eurekao.easemob.im.permission.annotation.OnMPermissionDenied;
 import com.eurekao.easemob.im.permission.annotation.OnMPermissionGranted;
 import com.eurekao.easemob.im.permission.annotation.OnMPermissionNeverAskAgain;
 import com.facebook.react.bridge.ActivityEventListener;
-import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
-import com.facebook.react.bridge.ReadableArray;
-import com.facebook.react.bridge.ReadableMap;
-import com.facebook.react.bridge.ReadableType;
-import com.facebook.react.bridge.WritableMap;
-import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.hyphenate.EMCallBack;
 import com.hyphenate.EMMessageListener;
 import com.hyphenate.EMValueCallBack;
@@ -43,18 +32,8 @@ import com.hyphenate.chat.EMConversation;
 import com.hyphenate.chat.EMMessage;
 import com.hyphenate.chat.EMMessage.ChatType;
 
-import java.io.File;
-import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import android.util.Pair;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import static android.R.attr.sessionService;
 
 
 public class RNEasemobImModule extends ReactContextBaseJavaModule implements LifecycleEventListener, ActivityEventListener {
@@ -210,47 +189,32 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
     }
 
     @ReactMethod
-    public void deleteRecentContact(String rContactId, Promise promise) {
-        LogUtil.w(TAG, "deleteRecentContact" + rContactId);
-        try {
-            EMClient.getInstance().contactManager().deleteContact(rContactId);
-            // remove user from memory and database
-            UserDao dao = new UserDao(reactContext.getApplicationContext());
-            dao.deleteContact(rContactId);
-            IMApplication.getInstance().getContactList().remove(rContactId);
-            promise.resolve("");
-        } catch (final Exception e) {
-            promise.reject("-1", ResourceUtil.getString(R.string.Delete_failed) + e.getMessage());
-        }
-    }
-
-    @ReactMethod
-    public void sendTextMessage(String content, String contactId, final Promise promise) {
+    public void sendTextMessage(String content, final Promise promise) {
         LogUtil.w(TAG, "sendTextMessage" + content);
-        EMMessage message = EMMessage.createTxtSendMessage(content, contactId);
+        EMMessage message = EMMessage.createTxtSendMessage(content, toChatUsername);
         sendMessage(message);
     }
 
     @ReactMethod
-    public void sendImageMessage(String file, String contactId, final Promise promise) {
-        EMMessage message = EMMessage.createImageSendMessage(file, false, contactId);
+    public void sendImageMessage(String file, final Promise promise) {
+        EMMessage message = EMMessage.createImageSendMessage(file, false, toChatUsername);
         sendMessage(message);
     }
 
     @ReactMethod
-    public void sendAudioMessage(String file, String duration, String contactId, final Promise promise) {
+    public void sendAudioMessage(String file, String duration, final Promise promise) {
         int durationI = 0;
         try {
             durationI = Integer.parseInt(duration);
         } catch (NumberFormatException e) {
             e.printStackTrace();
         }
-        EMMessage message = EMMessage.createVoiceSendMessage(file, durationI, contactId);
+        EMMessage message = EMMessage.createVoiceSendMessage(file, durationI, toChatUsername);
         sendMessage(message);
     }
 
     @ReactMethod
-    public void sendLocationMessage(String latitude, String longitude, String address, String contactId, final Promise promise) {
+    public void sendLocationMessage(String latitude, String longitude, String address, final Promise promise) {
         double lat = 23.12504;
         try {
             lat = Double.parseDouble(latitude);
@@ -263,7 +227,7 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
         } catch (NumberFormatException e) {
             e.printStackTrace();
         }
-        EMMessage message = EMMessage.createLocationSendMessage(lat, lon, address, contactId);
+        EMMessage message = EMMessage.createLocationSendMessage(lat, lon, address, toChatUsername);
         sendMessage(message);
     }
 
@@ -273,6 +237,21 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
         }
         //send message
         EMClient.getInstance().chatManager().sendMessage(message);
+    }
+
+    @ReactMethod
+    public void deleteRecentContact(String rContactId, Promise promise) {
+        LogUtil.w(TAG, "deleteRecentContact" + rContactId);
+        try {
+            EMClient.getInstance().contactManager().deleteContact(rContactId);
+            // remove user from memory and database
+            UserDao dao = new UserDao(reactContext.getApplicationContext());
+            dao.deleteContact(rContactId);
+            IMApplication.getInstance().getContactList().remove(rContactId);
+            promise.resolve("");
+        } catch (final Exception e) {
+            promise.reject("-1", ResourceUtil.getString(R.string.Delete_failed) + e.getMessage());
+        }
     }
 
     @ReactMethod
@@ -309,6 +288,7 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
         messageListener = new EMMessageListener() {
             @Override
             public void onMessageReceived(List<EMMessage> messages) {
+                List<EMMessage> toShow = new ArrayList<EMMessage>();
                 for (EMMessage message : messages) {
                     String username = null;
                     // group message
@@ -322,10 +302,11 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
                     // if the message is for current conversation
                     if (username.equals(toChatUsername) || message.getTo().equals(toChatUsername) || message.conversationId().equals(toChatUsername)) {
                         conversation.markMessageAsRead(message.getMsgId());
-                    } else {
-
+                        toShow.add(message);
                     }
                 }
+                if (toShow.size() > 0)
+                    ImModel.emit(ImModel.observeReceiveMessage, ImModel.createMessageList(toShow));
             }
 
             @Override

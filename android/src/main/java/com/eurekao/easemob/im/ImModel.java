@@ -13,7 +13,14 @@ import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.hyphenate.chat.EMClient;
 import com.hyphenate.chat.EMConversation;
+import com.hyphenate.chat.EMImageMessageBody;
+import com.hyphenate.chat.EMLocationMessageBody;
 import com.hyphenate.chat.EMMessage;
+import com.hyphenate.chat.EMMessage.Status;
+import com.hyphenate.chat.EMTextMessageBody;
+import com.hyphenate.chat.EMVideoMessageBody;
+import com.hyphenate.chat.EMVoiceMessageBody;
+import com.hyphenate.exceptions.HyphenateException;
 import com.hyphenate.util.DateUtils;
 
 import java.util.ArrayList;
@@ -396,8 +403,140 @@ public class ImModel {
         return writableArray;
     }
 
-    public static WritableMap createMessage(EMMessage item) {
-        return null;
+    public static WritableMap createMessage(EMMessage message) {
+        WritableMap itemMap = Arguments.createMap();
+        itemMap.putString(MessageConstant.Message.MSG_ID, message.getMsgId());
+        itemMap.putString(MessageConstant.Message.MSG_TYPE, getMessageType(message.getType()));
+        itemMap.putString(MessageConstant.Message.TIME_STRING, Long.toString(message.getMsgTime() / 1000));
+        itemMap.putString(MessageConstant.Message.IS_OUTGOING, message.direct()==EMMessage.Direct.SEND?"true":"false");
+        itemMap.putString(MessageConstant.Message.STATUS, getMessageStatus(message.status()));
+
+        WritableMap user = Arguments.createMap();
+        //user.putString(MessageConstant.User.DISPLAY_NAME, displayName);
+        user.putString(MessageConstant.User.USER_ID,  message.getFrom());
+        //user.putString(MessageConstant.User.AVATAR_PATH, avatar);
+        itemMap.putMap(MessageConstant.Message.FROM_USER, user);
+
+        switch (message.getType()) {
+            case TXT:
+                EMTextMessageBody txtBody = (EMTextMessageBody) message.getBody();
+                itemMap.putString(MessageConstant.Message.MSG_TEXT, txtBody.getMessage());
+                break;
+            case LOCATION:
+                WritableMap locationObj = Arguments.createMap();
+                EMLocationMessageBody locBody = (EMLocationMessageBody) message.getBody();
+                locationObj.putString(MessageConstant.Location.LATITUDE, Double.toString(locBody.getLatitude()));
+                locationObj.putString(MessageConstant.Location.LONGITUDE, Double.toString(locBody.getLongitude()));
+                locationObj.putString(MessageConstant.Location.ADDRESS, locBody.getAddress());
+                itemMap.putMap(MessageConstant.Message.EXTEND, locationObj);
+                break;
+            case IMAGE:
+                WritableMap imageObj = Arguments.createMap();
+                EMImageMessageBody imageBody = (EMImageMessageBody) message.getBody();
+                if (message.direct() == EMMessage.Direct.SEND) {
+                    imageObj.putString(MessageConstant.MediaFile.THUMB_PATH, imageBody.getLocalUrl());
+                    imageObj.putString(MessageConstant.MediaFile.PATH, imageBody.getLocalUrl());
+                } else {
+                    imageObj.putString(MessageConstant.MediaFile.THUMB_PATH, imageBody.getThumbnailUrl());
+                    imageObj.putString(MessageConstant.MediaFile.PATH, imageBody.getThumbnailUrl());
+                }
+                imageObj.putString(MessageConstant.MediaFile.URL, imageBody.getRemoteUrl());
+                imageObj.putString(MessageConstant.MediaFile.DISPLAY_NAME, imageBody.getFileName());
+                imageObj.putString(MessageConstant.MediaFile.HEIGHT, Integer.toString(imageBody.getHeight()));
+                imageObj.putString(MessageConstant.MediaFile.WIDTH, Integer.toString(imageBody.getWidth()));
+                itemMap.putMap(MessageConstant.Message.EXTEND, imageObj);
+                break;
+            case VOICE:
+                WritableMap audioObj = Arguments.createMap();
+                EMVoiceMessageBody voiceBody = (EMVoiceMessageBody) message.getBody();
+                int len = voiceBody.getLength();
+                if (message.direct() == EMMessage.Direct.SEND) {
+                    audioObj.putString(MessageConstant.MediaFile.THUMB_PATH, voiceBody.getLocalUrl());
+                    audioObj.putString(MessageConstant.MediaFile.PATH, voiceBody.getLocalUrl());
+                    audioObj.putString(MessageConstant.MediaFile.URL, voiceBody.getLocalUrl());
+                } else {
+                    audioObj.putString(MessageConstant.MediaFile.THUMB_PATH, voiceBody.getRemoteUrl());
+                    audioObj.putString(MessageConstant.MediaFile.PATH, voiceBody.getRemoteUrl());
+                    audioObj.putString(MessageConstant.MediaFile.URL, voiceBody.getRemoteUrl());
+                }
+                audioObj.putString(MessageConstant.MediaFile.DURATION, Long.toString(len));
+                itemMap.putMap(MessageConstant.Message.EXTEND, audioObj);
+                break;
+            case VIDEO:
+                WritableMap videoDic = Arguments.createMap();
+                EMVideoMessageBody videoBody = (EMVideoMessageBody) message.getBody();
+                if (message.direct() == EMMessage.Direct.SEND) {
+                    videoDic.putString(MessageConstant.MediaFile.PATH, videoBody.getLocalUrl());
+                    videoDic.putString(MessageConstant.MediaFile.URL, videoBody.getLocalUrl());
+                } else {
+                    videoDic.putString(MessageConstant.MediaFile.PATH, videoBody.getRemoteUrl());
+                    videoDic.putString(MessageConstant.MediaFile.URL, videoBody.getRemoteUrl());
+                }
+                videoDic.putString(MessageConstant.MediaFile.THUMB_PATH, videoBody.getThumbnailUrl());
+                videoDic.putString(MessageConstant.MediaFile.DISPLAY_NAME, videoBody.getFileName());
+                videoDic.putString(MessageConstant.MediaFile.DURATION, Integer.toString(videoBody.getDuration()));
+                itemMap.putMap(MessageConstant.Message.EXTEND, videoDic);
+                break;
+            default:
+                break;
+        }
+        if (message.direct() == EMMessage.Direct.RECEIVE&&!message.isAcked() && message.getChatType() == EMMessage.ChatType.Chat) {
+            try {
+                EMClient.getInstance().chatManager().ackMessageRead(message.getFrom(), message.getMsgId());
+            } catch (HyphenateException e) {
+                e.printStackTrace();
+            }
+        }
+        return itemMap;
+    }
+
+
+    static String getMessageType(EMMessage.Type EMType) {
+        String type = MessageConstant.MsgType.CUSTON;
+        switch (EMType) {
+            case TXT:
+                type = MessageConstant.MsgType.TEXT;
+                break;
+            case IMAGE:
+                type = MessageConstant.MsgType.IMAGE;
+                break;
+            case VOICE:
+                type = MessageConstant.MsgType.VOICE;
+                break;
+            case VIDEO:
+                type = MessageConstant.MsgType.VIDEO;
+                break;
+            case LOCATION:
+                type = MessageConstant.MsgType.LOCATION;
+                break;
+            case FILE:
+                type = MessageConstant.MsgType.FILE;
+                break;
+            case CMD:
+                type = MessageConstant.MsgType.NOTIFICATION;
+                break;
+            default:
+                type = MessageConstant.MsgType.CUSTON;
+                break;
+        }
+
+        return type;
+    }
+
+    static String getMessageStatus(Status statusEnum) {
+        switch (statusEnum) {
+            case CREATE:
+                return MessageConstant.MsgStatus.SEND_DRAFT;
+            case INPROGRESS:
+                return MessageConstant.MsgStatus.SEND_SENDING;
+            case SUCCESS:
+                return MessageConstant.MsgStatus.SEND_SUCCESS;
+            case FAIL:
+                return MessageConstant.MsgStatus.SEND_FAILE;
+            default:
+                return MessageConstant.MsgStatus.SEND_DRAFT;
+        }
+
     }
 
     enum Key{
