@@ -275,8 +275,10 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
         }
         EMClient.getInstance().chatManager().addMessageListener(messageListener);
         toChatUsername = contactId;
+        IMApplication.getImModel().toChatUsername = contactId;
         conversation = EMClient.getInstance().chatManager().getConversation(contactId, EMConversation.EMConversationType.Chat, true);
         conversation.markAllMessagesAsRead();
+        ImModel.emit(ImModel.observeRecentContact, ImModel.createRecentList(IMApplication.getImModel().loadConversationList(), 0));
     }
 
     @ReactMethod
@@ -285,6 +287,7 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
         EMClient.getInstance().chatManager().removeMessageListener(messageListener);
         conversation = null;
         toChatUsername = null;
+        IMApplication.getImModel().toChatUsername = null;
     }
 
     protected void registerMessageListener() {
@@ -317,7 +320,9 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
             @Override
             public void onMessageRead(List<EMMessage> messages) {}
             @Override
-            public void onMessageDelivered(List<EMMessage> messages) { }
+            public void onMessageDelivered(List<EMMessage> messages) {
+                ImModel.emit(ImModel.observeRecentContact, ImModel.createRecentList(IMApplication.getImModel().loadConversationList(), 0));
+            }
             @Override
             public void onMessageRecalled(List<EMMessage> messages) {}
             @Override

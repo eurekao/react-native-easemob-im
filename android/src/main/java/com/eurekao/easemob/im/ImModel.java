@@ -1,6 +1,7 @@
 package com.eurekao.easemob.im;
 
 import android.content.Context;
+import android.text.TextUtils;
 import android.util.Pair;
 
 import com.eurekao.easemob.im.common.log.LogUtil;
@@ -41,6 +42,7 @@ public class ImModel {
     protected Map<Key,Object> valueCache = new HashMap<Key,Object>();
 
     private static ReactContext reactContext;
+    public String toChatUsername;
 
     public static void setReactContext(ReactContext reactContext) {
         ImModel.reactContext = reactContext;
@@ -369,9 +371,13 @@ public class ImModel {
             for (EMConversation conversation : recents) {
                 map = Arguments.createMap();
                 String username = conversation.conversationId();
-                unreadNumTotal += conversation.getUnreadMsgCount();
+                if (!TextUtils.isEmpty(IMApplication.getImModel().toChatUsername) && IMApplication.getImModel().toChatUsername.equals(username)) {
+                    map.putString("unreadCount", "0");
+                } else {
+                    map.putString("unreadCount", String.valueOf(conversation.getUnreadMsgCount()));
+                    unreadNumTotal += conversation.getUnreadMsgCount();
+                }
                 map.putString("username", username);
-                map.putString("unreadCount", String.valueOf(conversation.getUnreadMsgCount()));
                 if (conversation.getAllMsgCount() != 0) {
                     EMMessage lastMessage = conversation.getLastMessage();
                     String content = EaseCommonUtils.getMessageDigest(lastMessage);
@@ -528,7 +534,7 @@ public class ImModel {
             case CREATE:
                 return MessageConstant.MsgStatus.SEND_DRAFT;
             case INPROGRESS:
-                return MessageConstant.MsgStatus.SEND_SENDING;
+                return MessageConstant.MsgStatus.SEND_SUCCESS;
             case SUCCESS:
                 return MessageConstant.MsgStatus.SEND_SUCCESS;
             case FAIL:
