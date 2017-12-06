@@ -116,5 +116,26 @@ class Session {
     sendLocationMessage(latitude, longitude, address) {
         return RNEasemobIm.sendLocationMessage(latitude, longitude, address);
     }
+
+    getMessageSound() {
+        return RNEasemobIm.getMessageSound();
+    }
+    setMessageSound(checked) {
+        return RNEasemobIm.setMessageSound(checked);
+    }
+    
+    getMessageVibrate() {
+        return RNEasemobIm.getMessageVibrate();
+    }
+    setMessageVibrate(checked) {
+        return RNEasemobIm.setMessageVibrate(checked);
+    }
+        
+    getMessageNotify() {
+        return RNEasemobIm.getMessageNotify();
+    }
+    setMessageNotify(checked) {
+        return RNEasemobIm.setMessageNotify(checked);
+    }
 }
 module.exports = new Session();

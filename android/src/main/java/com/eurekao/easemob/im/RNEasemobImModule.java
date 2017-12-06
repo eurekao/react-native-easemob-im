@@ -58,7 +58,7 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
     }
 
     boolean string2Boolean(String bool) {
-        return TextUtils.isEmpty(bool) ? false : !"0".equals(bool);
+        return TextUtils.isEmpty(bool) ? false : !"false".equals(bool);
     }
 
     @Override
@@ -171,15 +171,30 @@ public class RNEasemobImModule extends ReactContextBaseJavaModule implements Lif
     }
 
     @ReactMethod
+    public void getMessageNotify(final Promise promise) {
+        promise.resolve(IMApplication.getInstance().isMsgNotifyAllowed(null));
+    }
+
+    @ReactMethod
     public void setMessageNotify(String mute, final Promise promise) {
         IMApplication.getImModel().setSettingMsgNotification(string2Boolean(mute));
         promise.resolve("");
     }
 
     @ReactMethod
+    public void getMessageSound(final Promise promise) {
+        promise.resolve(IMApplication.getInstance().isMsgSoundAllowed(null));
+    }
+
+    @ReactMethod
     public void setMessageSound(String mute, final Promise promise) {
         IMApplication.getImModel().setSettingMsgSound(string2Boolean(mute));
         promise.resolve("");
+    }
+
+    @ReactMethod
+    public void getMessageVibrate(final Promise promise) {
+        promise.resolve(IMApplication.getInstance().isMsgVibrateAllowed(null));
     }
 
     @ReactMethod
