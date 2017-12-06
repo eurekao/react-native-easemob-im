@@ -605,6 +605,7 @@ public class IMApplication {
     }
 
     synchronized void reset() {
+        username = null;
         isSyncingGroupsWithServer = false;
         isSyncingContactsWithServer = false;
         isSyncingBlackListWithServer = false;
